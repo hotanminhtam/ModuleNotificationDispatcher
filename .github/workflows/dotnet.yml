@@ -10,12 +10,14 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     
     - name: Setup .NET
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v5
       with:
         dotnet-version: 9.0.x # Using 9.0.x as it's the latest stable, or 10.0.x-preview if needed. 
                               # Note: net10.0 might require a specific preview version.
@@ -30,7 +32,7 @@ jobs:
       run: dotnet test ModuleNotificationDispatcher.slnx --no-build --configuration Release --verbosity normal --collect:"XPlat Code Coverage"
 
     - name: Upload coverage reports to Codecov
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         directory: ./ModuleNotificationDispatcher.Tests/TestResults
