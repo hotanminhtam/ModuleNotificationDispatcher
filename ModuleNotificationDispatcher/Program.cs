@@ -29,7 +29,7 @@ internal class Program
         int maxRetry = settings.GetValue<int>("MaxRetry", 3);
 
         // Load Kafka settings
-        string bootstrapServers = kafkaSettings.GetValue<string>("BootstrapServers", "localhost:9092")!;
+        string bootstrapServers = kafkaSettings.GetValue<string>("BootstrapServers", "127.0.0.1:9092")!;
         string topic = kafkaSettings.GetValue<string>("Topic", "notification-requests")!;
         string groupId = kafkaSettings.GetValue<string>("GroupId", "notification-group")!;
 
