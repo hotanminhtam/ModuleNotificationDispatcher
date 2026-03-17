@@ -1,9 +1,10 @@
 using ModuleNotificationDispatcher.Infrastructure.Resilience;
 using ModuleNotificationDispatcher.Domain.Models;
-using ModuleNotificationDispatcher.Services;
+using ModuleNotificationDispatcher.Infrastructure.Providers;
+using ModuleNotificationDispatcher.Application.Validation;
 using ModuleNotificationDispatcher.Domain.Interfaces;
 
-namespace ModuleNotificationDispatcher.Application;
+namespace ModuleNotificationDispatcher.Application.Dispatcher;
 
 /// <summary>
 /// Handles the concurrent dispatching of notifications across different providers (Email, Sms, etc.)
@@ -11,6 +12,7 @@ namespace ModuleNotificationDispatcher.Application;
 public class NotificationDispatcher
 {
     private readonly Dictionary<NotificationType, INotificationProvider> _providers;
+    private readonly Dictionary<NotificationType, CircuitBreaker> _circuitBreakers;
     private readonly TimeSpan _perRequestTimeout;
     private readonly int _maxParallelism;
     private readonly int _maxRetry;
@@ -26,10 +28,13 @@ public class NotificationDispatcher
         IEnumerable<INotificationProvider>? providers = null,
         TimeSpan? perRequestTimeout = null,
         int maxParallelism = 5000,
-        int maxRetry = 3)
+        int maxRetry = 3,
+        int cbFailureThreshold = 10,
+        TimeSpan? cbRecoveryTimeout = null)
     {
-        providers ??= [new EmailNotificationProvider(), new SmsNotificationProvider()];
+        providers ??= [new EmailNotificationProvider(), new SmsNotificationProvider(), new PushNotificationProvider()];
         _providers = providers.ToDictionary(p => p.Type);
+        _circuitBreakers = _providers.Keys.ToDictionary(type => type, _ => new CircuitBreaker(cbFailureThreshold, cbRecoveryTimeout));
         
         _perRequestTimeout = perRequestTimeout ?? TimeSpan.FromSeconds(30);
         _maxParallelism = maxParallelism;
@@ -69,6 +74,14 @@ public class NotificationDispatcher
                 case ProcessingResult.Success: Interlocked.Increment(ref successCount); break;
                 case ProcessingResult.Failure: Interlocked.Increment(ref failureCount); break;
                 case ProcessingResult.Timeout: Interlocked.Increment(ref timeoutCount); break;
+                case ProcessingResult.Invalid: 
+                    Console.WriteLine($"[VALIDATION ERROR] {notification.Id} - Invalid data");
+                    Interlocked.Increment(ref failureCount); 
+                    break;
+                case ProcessingResult.ServiceUnavailable:
+                    Console.WriteLine($"[CIRCUIT OPEN] {notification.Type} is temporarily unavailable.");
+                    Interlocked.Increment(ref failureCount);
+                    break;
             }
         });
 
@@ -83,30 +96,39 @@ public class NotificationDispatcher
         Notification notification,
         CancellationToken ct)
     {
-        // Create a linked cancellation token to enforce per-request timeout
+        // 1. Validation
+        var validation = NotificationValidator.Validate(notification);
+        if (!validation.IsValid) return ProcessingResult.Invalid;
+
+        // 2. Circuit Breaker Check
+        if (!_providers.TryGetValue(notification.Type, out var provider) || 
+            !_circuitBreakers.TryGetValue(notification.Type, out var cb))
+            return ProcessingResult.Failure;
+
+        if (!cb.IsAllowed()) return ProcessingResult.ServiceUnavailable;
+
+        // 3. Create a linked cancellation token to enforce per-request timeout
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         linkedCts.CancelAfter(_perRequestTimeout);
 
         try
         {
-            if (!_providers.TryGetValue(notification.Type, out var provider))
-                return ProcessingResult.Failure;
-
             await Retry.ExecuteAsync(async () =>
             {
                 await provider.SendAsync(notification, linkedCts.Token);
+                cb.RecordSuccess();
             }, linkedCts.Token, _maxRetry);
 
             return ProcessingResult.Success;
         }
         catch (OperationCanceledException)
         {
-            // Report timeout if the task was cancelled due to expiration
+            cb.RecordFailure();
             return ProcessingResult.Timeout;
         }
         catch
         {
-            // General failure case (after exhausted retries)
+            cb.RecordFailure();
             return ProcessingResult.Failure;
         }
     }
@@ -122,5 +144,5 @@ public class NotificationDispatcher
         Console.WriteLine("==========================================\n");
     }
 
-    private enum ProcessingResult { Success, Failure, Timeout }
+    private enum ProcessingResult { Success, Failure, Timeout, Invalid, ServiceUnavailable }
 }

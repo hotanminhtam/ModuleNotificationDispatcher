@@ -1,20 +1,20 @@
-using ModuleNotificationDispatcher.Domain.Interfaces;
 using ModuleNotificationDispatcher.Domain.Models;
+using ModuleNotificationDispatcher.Domain.Interfaces;
 
-namespace ModuleNotificationDispatcher.Services;
+namespace ModuleNotificationDispatcher.Infrastructure.Providers;
 
 /// <summary>
-/// Provider for sending SMS notifications.
+/// Provider for sending email notifications.
 /// </summary>
-public class SmsNotificationProvider : INotificationProvider
+public class EmailNotificationProvider : INotificationProvider
 {
     /// <inheritdoc />
-    public NotificationType Type => NotificationType.Sms;
+    public NotificationType Type => NotificationType.Email;
 
     /// <summary>
-    /// Simulates sending an SMS notification with a random delay and failure rate.
+    /// Simulates sending an email notification with a random delay and failure rate.
     /// </summary>
-    /// <param name="notification">The SMS notification to send.</param>
+    /// <param name="notification">The email notification to send.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation.</param>
     public async Task SendAsync(Notification notification, CancellationToken cancellationToken)
     {
@@ -24,7 +24,7 @@ public class SmsNotificationProvider : INotificationProvider
         // Simulate a 20% random failure rate for testing resilience
         if (Random.Shared.NextDouble() < 0.2)
         {
-            throw new Exception("SMS delivery failed.");
+            throw new Exception("Email delivery failed.");
         }
     }
 }

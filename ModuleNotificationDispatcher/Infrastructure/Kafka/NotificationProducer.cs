@@ -23,13 +23,26 @@ public class NotificationProducer : IDisposable
             BootstrapServers = bootstrapServers,
             LingerMs = 5,
             Acks = Acks.Leader,
-            Debug = "broker,topic,msg", // Enable detailed debugging
-            MessageTimeoutMs = 10000     // Set a 10s timeout for messages
+            Debug = "broker,topic,msg",
+            MessageTimeoutMs = 10000
         })
         .SetErrorHandler((_, e) => Console.WriteLine($"Kafka Error: {e.Reason}"))
-        .SetLogHandler((_, l) => Console.WriteLine($"Kafka Log: [{l.Level}] {l.Message}"))
+        .SetLogHandler((_, l) => {
+            if (l.Message.Contains("Metadata")) Console.WriteLine($"Kafka Metadata: {l.Message}");
+            else Console.WriteLine($"Kafka Log: [{l.Level}] {l.Message}");
+        })
         .Build(), topic)
     {
+        // Force metadata request to see advertised listeners
+        try {
+            var meta = _producer.GetMetadata(true, topic, TimeSpan.FromSeconds(5));
+            Console.WriteLine($"\n[DIAGNOSTIC] Connected to Cluster: {meta.ClusterId}");
+            foreach (var broker in meta.Brokers) {
+                Console.WriteLine($"[DIAGNOSTIC] Broker {broker.BrokerId} advertised itself as: {broker.Host}:{broker.Port}");
+            }
+        } catch (Exception ex) {
+            Console.WriteLine($"[DIAGNOSTIC] Could not fetch metadata: {ex.Message}");
+        }
     }
 
     /// <summary>

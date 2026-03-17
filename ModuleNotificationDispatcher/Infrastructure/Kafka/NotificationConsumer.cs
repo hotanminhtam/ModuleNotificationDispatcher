@@ -1,14 +1,14 @@
 using Confluent.Kafka;
 using System.Text.Json;
 using ModuleNotificationDispatcher.Domain.Models;
-using ModuleNotificationDispatcher.Application;
+using ModuleNotificationDispatcher.Application.Dispatcher;
 
 namespace ModuleNotificationDispatcher.Infrastructure.Kafka;
 
 /// <summary>
 /// Listens to Kafka topics and triggers the notification dispatch process.
 /// </summary>
-public class NotificationConsumer
+public class NotificationConsumer : IDisposable
 {
     private readonly IConsumer<string, string> _consumer;
     private readonly NotificationDispatcher _dispatcher;
@@ -87,5 +87,12 @@ public class NotificationConsumer
         {
             _consumer.Close();
         }
+    }
+
+    public void Dispose()
+    {
+        _consumer.Unsubscribe();
+        _consumer.Close();
+        _consumer.Dispose();
     }
 }

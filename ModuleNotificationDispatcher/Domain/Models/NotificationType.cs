@@ -13,5 +13,10 @@ public enum NotificationType
     /// <summary>
     /// Delivery via SMS gateway.
     /// </summary>
-    Sms = 2
+    Sms = 2,
+
+    /// <summary>
+    /// Delivery via Mobile Push service (Firebase/APNs).
+    /// </summary>
+    Push = 3
 }

@@ -1,5 +1,6 @@
+using Confluent.Kafka;
 using Microsoft.Extensions.Configuration;
-using ModuleNotificationDispatcher.Application;
+using ModuleNotificationDispatcher.Application.Dispatcher;
 using ModuleNotificationDispatcher.Domain.Models;
 using ModuleNotificationDispatcher.Infrastructure.Kafka;
 
@@ -33,6 +34,11 @@ internal class Program
         string topic = kafkaSettings.GetValue<string>("Topic", "notification-requests")!;
         string groupId = kafkaSettings.GetValue<string>("GroupId", "notification-group")!;
 
+        // Load Circuit Breaker settings
+        var cbSettings = kafkaSettings.GetSection("CircuitBreakerSettings");
+        int cbThreshold = cbSettings.GetValue<int>("FailureThreshold", 10);
+        int cbTimeoutSec = cbSettings.GetValue<int>("RecoveryTimeoutSeconds", 30);
+
         // --- 2. PERFORMANCE OPTIMIZATION ---
         // Pre-warm the ThreadPool to handle massive concurrency without initial delay
         ThreadPool.SetMinThreads(minThreads, minThreads);
@@ -64,10 +70,22 @@ internal class Program
             var watch = System.Diagnostics.Stopwatch.StartNew();
             for (int i = 0; i < 10000; i++)
             {
-                var type = i % 2 == 0 ? NotificationType.Email : NotificationType.Sms;
+                var typeValue = i % 3;
+                var type = typeValue switch
+                {
+                    0 => NotificationType.Email,
+                    1 => NotificationType.Sms,
+                    _ => NotificationType.Push
+                };
+                
                 var notification = new Notification
                 {
-                    Destination = type == NotificationType.Email ? $"user{i}@mail.com" : $"09876543{i%100:D2}",
+                    Destination = type switch
+                    {
+                        NotificationType.Email => $"user{i}@mail.com",
+                        NotificationType.Sms => $"09876543{i % 100:D2}",
+                        _ => $"device-token-{i}"
+                    },
                     Message = $"Performance Test Message #{i} - Sent via Kafka",
                     Type = type,
                     Priority = (NotificationPriority)((i % 3) + 1)
@@ -97,7 +115,9 @@ internal class Program
             NotificationDispatcher dispatcher = new(
                 perRequestTimeout: TimeSpan.FromSeconds(perRequestTimeout),
                 maxParallelism: maxParallelism,
-                maxRetry: maxRetry);
+                maxRetry: maxRetry,
+                cbFailureThreshold: cbThreshold,
+                cbRecoveryTimeout: TimeSpan.FromSeconds(cbTimeoutSec));
 
             var consumer = new NotificationConsumer(bootstrapServers, topic, groupId, dispatcher);
             

@@ -2,7 +2,7 @@ using Confluent.Kafka;
 using Moq;
 using ModuleNotificationDispatcher.Infrastructure.Kafka;
 using ModuleNotificationDispatcher.Domain.Models;
-using ModuleNotificationDispatcher.Application;
+using ModuleNotificationDispatcher.Application.Dispatcher;
 using ModuleNotificationDispatcher.Domain.Interfaces;
 using System.Text.Json;
 using Xunit;
