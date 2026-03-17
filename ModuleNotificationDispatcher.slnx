@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="ModuleNotificationDispatcher.Tests/ModuleNotificationDispatcher.Tests.csproj" />
+  <Project Path="ModuleNotificationDispatcher/ModuleNotificationDispatcher.csproj" />
+</Solution>
