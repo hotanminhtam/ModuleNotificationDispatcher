@@ -73,7 +73,20 @@ internal class Program
                     Priority = (NotificationPriority)((i % 3) + 1)
                 };
 
-                await producer.ProduceAsync(notification);
+                try
+                {
+                    await producer.ProduceAsync(notification);
+                }
+                catch (ProduceException<string, string> ex)
+                {
+                    Console.WriteLine($"[ERROR] Failed to delivery message {i}: {ex.Error.Reason}");
+                    if (i > 10) break; // Stop after 10 errors to avoid flooding
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[ERROR] Unexpected error: {ex.Message}");
+                    break;
+                }
             }
             watch.Stop();
             Console.WriteLine($"\n[SUCCESS] Successfully pushed 10,000 messages in {watch.Elapsed.TotalSeconds:F2}s.");

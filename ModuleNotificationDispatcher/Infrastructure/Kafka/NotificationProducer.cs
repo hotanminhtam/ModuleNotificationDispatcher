@@ -22,8 +22,13 @@ public class NotificationProducer : IDisposable
         { 
             BootstrapServers = bootstrapServers,
             LingerMs = 5,
-            Acks = Acks.Leader
-        }).Build(), topic)
+            Acks = Acks.Leader,
+            Debug = "broker,topic,msg", // Enable detailed debugging
+            MessageTimeoutMs = 10000     // Set a 10s timeout for messages
+        })
+        .SetErrorHandler((_, e) => Console.WriteLine($"Kafka Error: {e.Reason}"))
+        .SetLogHandler((_, l) => Console.WriteLine($"Kafka Log: [{l.Level}] {l.Message}"))
+        .Build(), topic)
     {
     }
 
