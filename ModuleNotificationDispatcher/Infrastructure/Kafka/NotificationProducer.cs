@@ -33,16 +33,6 @@ public class NotificationProducer : IDisposable
         })
         .Build(), topic)
     {
-        // Force metadata request to see advertised listeners
-        try {
-            var meta = _producer.GetMetadata(true, topic, TimeSpan.FromSeconds(5));
-            Console.WriteLine($"\n[DIAGNOSTIC] Connected to Cluster: {meta.ClusterId}");
-            foreach (var broker in meta.Brokers) {
-                Console.WriteLine($"[DIAGNOSTIC] Broker {broker.BrokerId} advertised itself as: {broker.Host}:{broker.Port}");
-            }
-        } catch (Exception ex) {
-            Console.WriteLine($"[DIAGNOSTIC] Could not fetch metadata: {ex.Message}");
-        }
     }
 
     /// <summary>
@@ -58,16 +48,21 @@ public class NotificationProducer : IDisposable
 
     /// <summary>
     /// Publishes a notification to the Kafka topic.
+    /// This method is asynchronous to avoid blocking while the message is sent to the broker.
     /// </summary>
     public async Task ProduceAsync(Notification notification)
     {
+        // Serialize the notification object to a JSON string for Kafka.
         var value = JsonSerializer.Serialize(notification);
+        
+        // Create a Kafka Message with a unique key for partitioning.
         var message = new Message<string, string> 
         { 
             Key = notification.Id.ToString(), 
             Value = value 
         };
 
+        // Send the message to the configured topic.
         await _producer.ProduceAsync(_topic, message);
     }
 

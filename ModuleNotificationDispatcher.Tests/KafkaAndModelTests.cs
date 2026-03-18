@@ -47,7 +47,7 @@ public class KafkaComponentTests
         var topic = "test-topic";
         var consumer = new NotificationConsumer(mockInternalConsumer.Object, topic, dispatcher);
         
-        var notification = new Notification { Type = NotificationType.Email, Destination = "target" };
+        var notification = new Notification { Type = NotificationType.Email, Destination = "test@example.com", Message = "Test Message" };
         var json = JsonSerializer.Serialize(notification);
         var consumeResult = new ConsumeResult<string, string>
         {

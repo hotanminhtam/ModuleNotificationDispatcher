@@ -9,8 +9,10 @@ namespace ModuleNotificationDispatcher;
 internal class Program
 {
     /// <summary>
-    /// Entry point for the Notification system with Kafka integration.
-    /// Supports both producing (pushing to Kafka) and consuming (sending notifications).
+    /// Entry point for the Module Notification Dispatcher.
+    /// This application can run in two modes:
+    /// 1. Producer: Simulates high-volume notification requests by pushing them to Kafka.
+    /// 2. Consumer: Listens for requests from Kafka and processes them using a high-performance dispatcher.
     /// </summary>
     private static async Task Main()
     {

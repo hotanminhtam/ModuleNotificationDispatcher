@@ -64,11 +64,14 @@ public class NotificationDispatcher
         Console.WriteLine($"--- Starting dispatch for {notifications.Count()} notifications ---");
         var watch = System.Diagnostics.Stopwatch.StartNew();
 
-        // 2. Process notifications in parallel while ensuring high throughput
+        // 2. Process notifications in parallel while ensuring high throughput.
+        // Parallel.ForEachAsync automatically manages worker threads to maximize CPU usage.
         await Parallel.ForEachAsync(sortedNotifications, parallelOptions, async (notification, _) =>
         {
+            // Process each notification individually (validation -> circuit check -> retry -> send)
             var result = await ProcessNotificationAsync(notification, ct);
             
+            // Atomically update counters based on the processing result.
             switch (result)
             {
                 case ProcessingResult.Success: Interlocked.Increment(ref successCount); break;
@@ -86,6 +89,7 @@ public class NotificationDispatcher
         });
 
         watch.Stop();
+        // Display the final batch statistics.
         PrintSummary(watch.Elapsed.TotalSeconds, successCount, failureCount, timeoutCount);
     }
 

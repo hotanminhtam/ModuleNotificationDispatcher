@@ -6,10 +6,13 @@ namespace ModuleNotificationDispatcher.Application.Validation;
 /// <summary>
 /// Provides validation logic for notifications.
 /// </summary>
-public static class NotificationValidator
+public static partial class NotificationValidator
 {
-    private static readonly Regex EmailRegex = new(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.Compiled);
-    private static readonly Regex PhoneRegex = new(@"^\+?[1-9]\d{1,14}$", RegexOptions.Compiled);
+    [GeneratedRegex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.Compiled)]
+    private static partial Regex EmailRegex();
+
+    [GeneratedRegex(@"^\+?[1-9]\d{1,14}$", RegexOptions.Compiled)]
+    private static partial Regex PhoneRegex();
 
     public static (bool IsValid, string? ErrorMessage) Validate(Notification notification)
     {
@@ -21,12 +24,12 @@ public static class NotificationValidator
 
         if (notification.Type == NotificationType.Email)
         {
-            if (!EmailRegex.IsMatch(notification.Destination))
+            if (!EmailRegex().IsMatch(notification.Destination))
                 return (false, "Invalid email format.");
         }
         else if (notification.Type == NotificationType.Sms)
         {
-            if (!PhoneRegex.IsMatch(notification.Destination))
+            if (!PhoneRegex().IsMatch(notification.Destination))
                 return (false, "Invalid phone number format (E.164 recommended).");
         }
 

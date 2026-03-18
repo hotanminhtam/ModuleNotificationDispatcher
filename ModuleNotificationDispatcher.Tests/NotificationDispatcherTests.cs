@@ -1,5 +1,5 @@
 using Moq;
-using ModuleNotificationDispatcher.Application;
+using ModuleNotificationDispatcher.Application.Dispatcher;
 using ModuleNotificationDispatcher.Domain.Interfaces;
 using ModuleNotificationDispatcher.Domain.Models;
 using ModuleNotificationDispatcher.Infrastructure.Resilience;
@@ -28,8 +28,8 @@ public class NotificationDispatcherTests
 
         var notifications = new List<Notification>
         {
-            new Notification { Type = NotificationType.Email, Priority = NotificationPriority.High },
-            new Notification { Type = NotificationType.Sms, Priority = NotificationPriority.Medium }
+            new Notification { Type = NotificationType.Email, Priority = NotificationPriority.High, Destination = "test@example.com", Message = "Hello" },
+            new Notification { Type = NotificationType.Sms, Priority = NotificationPriority.Medium, Destination = "+1234567890", Message = "Hello" }
         };
 
         // Act
@@ -58,7 +58,7 @@ public class NotificationDispatcherTests
         var providers = new List<INotificationProvider> { mockEmailProvider.Object };
         var dispatcher = new NotificationDispatcher(providers, TimeSpan.FromSeconds(5), 10, 3);
 
-        var notifications = new List<Notification> { new Notification { Type = NotificationType.Email } };
+        var notifications = new List<Notification> { new Notification { Type = NotificationType.Email, Destination = "test@example.com", Message = "Hello" } };
 
         // Act
         await dispatcher.DispatchAsync(notifications, CancellationToken.None);
@@ -79,7 +79,7 @@ public class NotificationDispatcherTests
         var providers = new List<INotificationProvider> { mockEmailProvider.Object };
         var dispatcher = new NotificationDispatcher(providers, TimeSpan.FromSeconds(5), 1, 2);
 
-        var notifications = new List<Notification> { new Notification { Type = NotificationType.Email } };
+        var notifications = new List<Notification> { new Notification { Type = NotificationType.Email, Destination = "test@example.com", Message = "Hello" } };
 
         // Act
         await dispatcher.DispatchAsync(notifications, CancellationToken.None);
@@ -116,7 +116,7 @@ public class NotificationDispatcherTests
         // Set perRequestTimeout to 500ms
         var dispatcher = new NotificationDispatcher(providers, TimeSpan.FromMilliseconds(500), 1, 0);
 
-        var notifications = new List<Notification> { new Notification { Type = NotificationType.Email } };
+        var notifications = new List<Notification> { new Notification { Type = NotificationType.Email, Destination = "test@example.com", Message = "Hello" } };
 
         // Act
         await dispatcher.DispatchAsync(notifications, CancellationToken.None);

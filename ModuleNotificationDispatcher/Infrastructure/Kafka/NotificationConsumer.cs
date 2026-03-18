@@ -66,19 +66,22 @@ public class NotificationConsumer : IDisposable
             {
                 try
                 {
+                    // Blocking call that waits for a new message from Kafka or for the timeout.
                     var result = _consumer.Consume(ct);
                     if (result?.Message?.Value == null) continue;
 
+                    // Deserialize the JSON message back into a Notification domain object.
                     var notification = JsonSerializer.Deserialize<Notification>(result.Message.Value);
                     if (notification != null)
                     {
-                        // Process the notification using our high-performance Dispatcher
+                        // Use the NotificationDispatcher to handle delivery with retries and circuit breakers.
                         // For even higher throughput, you could batch multiple consumed messages here.
                         await _dispatcher.DispatchAsync(new[] { notification }, ct);
                     }
                 }
                 catch (ConsumeException e)
                 {
+                    // Log Kafka-specific consumption errors.
                     Console.WriteLine($"Error occurred: {e.Error.Reason}");
                 }
             }
