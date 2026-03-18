@@ -6,21 +6,13 @@ using ModuleNotificationDispatcher.Domain.Interfaces;
 namespace ModuleNotificationDispatcher.Application.Dispatcher;
 
 /// <summary>
-/// Dispatches thousands of notifications concurrently.
-/// Supports: PriorityQueue, Retry with Exponential Backoff, Timeout.
+/// Dispatches notifications concurrently with PriorityQueue, Retry and Timeout.
 /// </summary>
 public class NotificationDispatcher
 {
-    // Available providers (Email, SMS) mapped by their notification type
     private readonly Dictionary<NotificationType, INotificationProvider> _providers;
-
-    // Maximum time allowed per notification (default: 30 seconds)
     private readonly TimeSpan _perRequestTimeout;
-
-    // Maximum number of notifications processed in parallel
     private readonly int _maxParallelism;
-
-    // Maximum retry attempts when sending fails
     private readonly int _maxRetry;
 
     /// <summary>
@@ -36,10 +28,8 @@ public class NotificationDispatcher
         int maxParallelism = 5000,
         int maxRetry = 3)
     {
-        // If no providers are given, use Email + SMS by default
         providers ??= [new EmailNotificationProvider(), new SmsNotificationProvider()];
         _providers = providers.ToDictionary(p => p.Type);
-
         _perRequestTimeout = perRequestTimeout ?? TimeSpan.FromSeconds(30);
         _maxParallelism = maxParallelism;
         _maxRetry = maxRetry;
@@ -47,12 +37,6 @@ public class NotificationDispatcher
 
     /// <summary>
     /// Dispatches a batch of notifications concurrently, prioritized by urgency.
-    ///
-    /// Processing flow:
-    /// 1. Enqueue all notifications into a PriorityQueue (High=1 first, Low=3 last)
-    /// 2. Dequeue in priority order
-    /// 3. Process in parallel using Parallel.ForEachAsync
-    /// 4. Each notification: Find Provider → Send with Retry (up to 3 times)
     /// </summary>
     /// <param name="notifications">The list of notifications to dispatch.</param>
     /// <param name="ct">Cancellation token to cancel the entire operation.</param>
@@ -60,55 +44,30 @@ public class NotificationDispatcher
         IEnumerable<Notification> notifications,
         CancellationToken ct)
     {
-        // ===== STEP 1: Enqueue into PriorityQueue =====
-        // PriorityQueue automatically sorts: lower number = higher priority
-        // High=1 will be dequeued first, Low=3 last
+        // Enqueue into PriorityQueue (High=1 first, Low=3 last)
         var priorityQueue = new PriorityQueue<Notification, int>();
-
         foreach (var notification in notifications)
-        {
-            // Enqueue: add notification with its priority as the sort key (1, 2, or 3)
             priorityQueue.Enqueue(notification, (int)notification.Priority);
-        }
 
-        // ===== STEP 2: Dequeue in priority order =====
-        // Dequeue one by one → High first, then Medium, then Low
-        var sortedNotifications = new List<Notification>(priorityQueue.Count);
+        // Dequeue in priority order
+        var sorted = new List<Notification>(priorityQueue.Count);
         while (priorityQueue.Count > 0)
-        {
-            sortedNotifications.Add(priorityQueue.Dequeue());
-        }
+            sorted.Add(priorityQueue.Dequeue());
 
-        // ===== STEP 3: Process in parallel =====
-        var parallelOptions = new ParallelOptions
-        {
-            MaxDegreeOfParallelism = _maxParallelism  // Limit concurrent threads
-        };
-
-        // Result counters (using Interlocked because multiple threads update them)
+        var options = new ParallelOptions { MaxDegreeOfParallelism = _maxParallelism };
         long successCount = 0, failureCount = 0, timeoutCount = 0;
 
-        Console.WriteLine($"--- Starting dispatch for {sortedNotifications.Count} notifications ---");
+        Console.WriteLine($"--- Starting dispatch for {sorted.Count} notifications ---");
         var watch = System.Diagnostics.Stopwatch.StartNew();
 
-        // Parallel.ForEachAsync: processes many notifications AT THE SAME TIME (not sequentially)
-        await Parallel.ForEachAsync(sortedNotifications, parallelOptions, async (notification, _) =>
+        await Parallel.ForEachAsync(sorted, options, async (notification, _) =>
         {
-            // Process each notification: find provider → send → retry on failure
-            var result = await ProcessOneNotificationAsync(notification, ct);
-
-            // Update counters based on result
+            var result = await ProcessOneAsync(notification, ct);
             switch (result)
             {
-                case Result.Success:
-                    Interlocked.Increment(ref successCount);
-                    break;
-                case Result.Timeout:
-                    Interlocked.Increment(ref timeoutCount);
-                    break;
-                default: // Failure
-                    Interlocked.Increment(ref failureCount);
-                    break;
+                case Result.Success: Interlocked.Increment(ref successCount); break;
+                case Result.Timeout: Interlocked.Increment(ref timeoutCount); break;
+                default:             Interlocked.Increment(ref failureCount); break;
             }
         });
 
@@ -117,55 +76,28 @@ public class NotificationDispatcher
     }
 
     /// <summary>
-    /// Processes a SINGLE notification:
-    /// 1. Find the matching provider (EmailProvider or SmsProvider)
-    /// 2. Send with retry up to 3 times (Exponential Backoff)
-    /// 3. If timeout exceeded → return Timeout
+    /// Processes a single notification: find provider → send with retry → handle timeout.
     /// </summary>
-    private async Task<Result> ProcessOneNotificationAsync(
-        Notification notification,
-        CancellationToken ct)
+    private async Task<Result> ProcessOneAsync(Notification notification, CancellationToken ct)
     {
-        // Step 1: Find provider (Email → EmailProvider, Sms → SmsProvider)
         if (!_providers.TryGetValue(notification.Type, out var provider))
-        {
-            Console.WriteLine($"[ERROR] No provider found for type: {notification.Type}");
             return Result.Failure;
-        }
 
-        // Step 2: Create a per-notification timeout (default 30 seconds)
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(_perRequestTimeout);
 
         try
         {
-            // Step 3: Send with Retry (up to _maxRetry attempts)
-            // Attempt 1 fails → wait 500ms  → Attempt 2
-            // Attempt 2 fails → wait 1000ms → Attempt 3
-            // Attempt 3 fails → wait 2000ms → Attempt 4 (final)
-            // Attempt 4 fails → throw exception
             await Retry.ExecuteAsync(
-                action: () => provider.SendAsync(notification, timeoutCts.Token),
-                cancellationToken: timeoutCts.Token,
-                maxRetry: _maxRetry);
-
+                () => provider.SendAsync(notification, timeoutCts.Token),
+                timeoutCts.Token,
+                _maxRetry);
             return Result.Success;
         }
-        catch (OperationCanceledException)
-        {
-            // Cancelled due to timeout or Ctrl+C
-            return Result.Timeout;
-        }
-        catch
-        {
-            // All retry attempts exhausted, still failing
-            return Result.Failure;
-        }
+        catch (OperationCanceledException) { return Result.Timeout; }
+        catch { return Result.Failure; }
     }
 
-    /// <summary>
-    /// Prints a summary report after dispatch is complete.
-    /// </summary>
     private static void PrintSummary(double totalSeconds, long success, long failure, long timeout)
     {
         Console.WriteLine("\n==========================================");
@@ -177,6 +109,5 @@ public class NotificationDispatcher
         Console.WriteLine("==========================================\n");
     }
 
-    // Simple enum to classify the result of processing a notification
     private enum Result { Success, Failure, Timeout }
 }
