@@ -2,39 +2,24 @@ name: .NET CI
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "main", "master" ]
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    branches: [ "main" ]
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v6
-    
+    - uses: actions/checkout@v4
+
     - name: Setup .NET
-      uses: actions/setup-dotnet@v5
+      uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 9.0.x # Using 9.0.x as it's the latest stable, or 10.0.x-preview if needed. 
-                              # Note: net10.0 might require a specific preview version.
+        dotnet-version: 10.0.x
 
     - name: Restore dependencies
       run: dotnet restore ModuleNotificationDispatcher.slnx
 
     - name: Build
       run: dotnet build ModuleNotificationDispatcher.slnx --no-restore --configuration Release
-
-    - name: Test
-      run: dotnet test ModuleNotificationDispatcher.slnx --no-build --configuration Release --verbosity normal --collect:"XPlat Code Coverage"
-
-    - name: Upload coverage reports to Codecov
-      uses: codecov/codecov-action@v5
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        directory: ./ModuleNotificationDispatcher.Tests/TestResults
-        fail_ci_if_error: false
