@@ -28,7 +28,7 @@ internal class Program
         Console.WriteLine("[SETUP] Generating sample notifications...\n");
 
         var notifications = new List<Notification>();
-        for (int i = 0; i < 50; i++)
+        for (int i = 0; i < 5000; i++)
         {
             bool isEmail = i % 2 == 0;
             var priority = (i % 3) switch
