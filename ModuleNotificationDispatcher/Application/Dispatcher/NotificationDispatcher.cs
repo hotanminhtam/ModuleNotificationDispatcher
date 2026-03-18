@@ -1,7 +1,6 @@
 using ModuleNotificationDispatcher.Infrastructure.Resilience;
 using ModuleNotificationDispatcher.Domain.Models;
 using ModuleNotificationDispatcher.Infrastructure.Providers;
-using ModuleNotificationDispatcher.Application.Validation;
 using ModuleNotificationDispatcher.Domain.Interfaces;
 
 namespace ModuleNotificationDispatcher.Application.Dispatcher;
@@ -122,15 +121,7 @@ public class NotificationDispatcher
         Notification notification,
         CancellationToken ct)
     {
-        // Step 1: Validate the notification data
-        var validation = NotificationValidator.Validate(notification);
-        if (!validation.IsValid)
-        {
-            Console.WriteLine($"[INVALID] {notification.Id} - {validation.ErrorMessage}");
-            return Result.Failure;
-        }
-
-        // Step 2: Find provider (Email → EmailProvider, Sms → SmsProvider)
+        // Step 1: Find provider (Email → EmailProvider, Sms → SmsProvider)
         if (!_providers.TryGetValue(notification.Type, out var provider))
         {
             Console.WriteLine($"[ERROR] No provider found for type: {notification.Type}");
