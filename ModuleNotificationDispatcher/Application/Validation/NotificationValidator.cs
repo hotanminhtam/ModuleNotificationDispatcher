@@ -8,10 +8,10 @@ namespace ModuleNotificationDispatcher.Application.Validation;
 /// </summary>
 public static partial class NotificationValidator
 {
-    [GeneratedRegex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.Compiled)]
+    [GeneratedRegex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$")]
     private static partial Regex EmailRegex();
 
-    [GeneratedRegex(@"^\+?[1-9]\d{1,14}$", RegexOptions.Compiled)]
+    [GeneratedRegex(@"^\+?[1-9]\d{1,14}$")]
     private static partial Regex PhoneRegex();
 
     public static (bool IsValid, string? ErrorMessage) Validate(Notification notification)

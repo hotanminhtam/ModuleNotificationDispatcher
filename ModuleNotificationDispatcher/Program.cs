@@ -70,14 +70,13 @@ internal class Program
             Console.WriteLine($"\n[PRODUCER] Generating 10,000 notifications for topic '{topic}'...");
 
             var watch = System.Diagnostics.Stopwatch.StartNew();
-            for (int i = 0; i < 10000; i++)
+            for (int i = 0; i < 100; i++)
             {
-                var typeValue = i % 3;
+                var typeValue = i % 2;
                 var type = typeValue switch
                 {
                     0 => NotificationType.Email,
-                    1 => NotificationType.Sms,
-                    _ => NotificationType.Push
+                    _ => NotificationType.Sms
                 };
                 
                 var notification = new Notification
@@ -85,8 +84,7 @@ internal class Program
                     Destination = type switch
                     {
                         NotificationType.Email => $"user{i}@mail.com",
-                        NotificationType.Sms => $"09876543{i % 100:D2}",
-                        _ => $"device-token-{i}"
+                        _ => $"09876543{i % 100:D2}"
                     },
                     Message = $"Performance Test Message #{i} - Sent via Kafka",
                     Type = type,

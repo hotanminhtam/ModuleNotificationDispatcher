@@ -32,7 +32,7 @@ public class NotificationDispatcher
         int cbFailureThreshold = 10,
         TimeSpan? cbRecoveryTimeout = null)
     {
-        providers ??= [new EmailNotificationProvider(), new SmsNotificationProvider(), new PushNotificationProvider()];
+        providers ??= [new EmailNotificationProvider(), new SmsNotificationProvider()];
         _providers = providers.ToDictionary(p => p.Type);
         _circuitBreakers = _providers.Keys.ToDictionary(type => type, _ => new CircuitBreaker(cbFailureThreshold, cbRecoveryTimeout));
         
