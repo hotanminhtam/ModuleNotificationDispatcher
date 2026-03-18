@@ -1,7 +1,7 @@
-using ModuleNotificationDispatcher.Infrastructure.Resilience;
-using ModuleNotificationDispatcher.Domain.Models;
-using ModuleNotificationDispatcher.Infrastructure.Providers;
+using ModuleNotificationDispatcher.Domain.Exceptions;
 using ModuleNotificationDispatcher.Domain.Interfaces;
+using ModuleNotificationDispatcher.Domain.Models;
+using ModuleNotificationDispatcher.Infrastructure.Resilience;
 
 namespace ModuleNotificationDispatcher.Application.Dispatcher;
 
@@ -18,19 +18,18 @@ public class NotificationDispatcher
     /// <summary>
     /// Initializes the Dispatcher with the required settings.
     /// </summary>
-    /// <param name="providers">Notification providers to use (default: Email + SMS).</param>
-    /// <param name="perRequestTimeout">Max time per notification before timeout (default: 30s).</param>
-    /// <param name="maxParallelism">Max concurrent notifications (default: 5000).</param>
-    /// <param name="maxRetry">Max retry attempts on failure (default: 3).</param>
+    /// <param name="providers">Notification providers to use.</param>
+    /// <param name="perRequestTimeout">Max time per notification before timeout.</param>
+    /// <param name="maxParallelism">Max concurrent notifications.</param>
+    /// <param name="maxRetry">Max retry attempts on failure.</param>
     public NotificationDispatcher(
-        IEnumerable<INotificationProvider>? providers = null,
-        TimeSpan? perRequestTimeout = null,
-        int maxParallelism = 5000,
-        int maxRetry = 3)
+        IEnumerable<INotificationProvider> providers,
+        TimeSpan perRequestTimeout,
+        int maxParallelism,
+        int maxRetry)
     {
-        providers ??= [new EmailNotificationProvider(), new SmsNotificationProvider()];
         _providers = providers.ToDictionary(p => p.Type);
-        _perRequestTimeout = perRequestTimeout ?? TimeSpan.FromSeconds(30);
+        _perRequestTimeout = perRequestTimeout;
         _maxParallelism = maxParallelism;
         _maxRetry = maxRetry;
     }
@@ -44,12 +43,10 @@ public class NotificationDispatcher
         IEnumerable<Notification> notifications,
         CancellationToken ct)
     {
-        // Enqueue into PriorityQueue (High=1 first, Low=3 last)
         var priorityQueue = new PriorityQueue<Notification, int>();
         foreach (var notification in notifications)
             priorityQueue.Enqueue(notification, (int)notification.Priority);
 
-        // Dequeue in priority order
         var sorted = new List<Notification>(priorityQueue.Count);
         while (priorityQueue.Count > 0)
             sorted.Add(priorityQueue.Dequeue());
@@ -95,7 +92,7 @@ public class NotificationDispatcher
             return Result.Success;
         }
         catch (OperationCanceledException) { return Result.Timeout; }
-        catch { return Result.Failure; }
+        catch (NotificationDeliveryException) { return Result.Failure; }
     }
 
     private static void PrintSummary(double totalSeconds, long success, long failure, long timeout)

@@ -1,5 +1,8 @@
+using Microsoft.Extensions.Configuration;
 using ModuleNotificationDispatcher.Application.Dispatcher;
+using ModuleNotificationDispatcher.Domain.Interfaces;
 using ModuleNotificationDispatcher.Domain.Models;
+using ModuleNotificationDispatcher.Infrastructure.Providers;
 
 namespace ModuleNotificationDispatcher;
 
@@ -12,6 +15,19 @@ internal class Program
         Console.WriteLine("    Multi-channel notification processing (Email, SMS)");
         Console.WriteLine("==============================================================\n");
 
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
+            .Build();
+
+        var settings = new DispatcherSettings();
+        configuration.GetSection("DispatcherSettings").Bind(settings);
+
+        Console.WriteLine($"[CONFIG] Timeout={settings.PerRequestTimeoutSeconds}s, " +
+                          $"Parallelism={settings.MaxParallelism}, " +
+                          $"Retry={settings.MaxRetry}, " +
+                          $"Count={settings.NotificationCount}");
+
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (s, e) =>
         {
@@ -20,15 +36,22 @@ internal class Program
             Console.WriteLine("\n[CANCEL] Shutting down gracefully...");
         };
 
-        var dispatcher = new NotificationDispatcher(
-            perRequestTimeout: TimeSpan.FromSeconds(30),
-            maxParallelism: 100,
-            maxRetry: 3);
+        INotificationProvider[] providers =
+        [
+            new EmailNotificationProvider(),
+            new SmsNotificationProvider()
+        ];
 
-        Console.WriteLine("[SETUP] Generating sample notifications...\n");
+        var dispatcher = new NotificationDispatcher(
+            providers: providers,
+            perRequestTimeout: TimeSpan.FromSeconds(settings.PerRequestTimeoutSeconds),
+            maxParallelism: settings.MaxParallelism,
+            maxRetry: settings.MaxRetry);
+
+        Console.WriteLine("\n[SETUP] Generating sample notifications...\n");
 
         var notifications = new List<Notification>();
-        for (int i = 0; i < 5000; i++)
+        for (int i = 0; i < settings.NotificationCount; i++)
         {
             bool isEmail = i % 2 == 0;
             var priority = (i % 3) switch
