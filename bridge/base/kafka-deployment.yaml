@@ -1,0 +1,43 @@
+#! kafka-deployment.yaml
+# Generated code, do not edit
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: kafka
+    namespace: modulenotificationdispatcher
+    labels:
+        com.docker.compose.project: modulenotificationdispatcher
+        com.docker.compose.service: kafka
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            com.docker.compose.project: modulenotificationdispatcher
+            com.docker.compose.service: kafka
+    strategy:
+        type: Recreate
+    template:
+        metadata:
+            labels:
+                com.docker.compose.project: modulenotificationdispatcher
+                com.docker.compose.service: kafka
+                com.docker.compose.network.default: "true"
+        spec:
+            containers:
+                - name: kafka
+                  image: confluentinc/cp-kafka:7.6.0
+                  imagePullPolicy: IfNotPresent
+                  env:
+                    - name: KAFKA_ADVERTISED_LISTENERS
+                      value: "PLAINTEXT://localhost:9092"
+                    - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+                      value: "true"
+                    - name: KAFKA_BROKER_ID
+                      value: "1"
+                    - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+                      value: "1"
+                    - name: KAFKA_ZOOKEEPER_CONNECT
+                      value: "zookeeper:2181"
+                  ports:
+                    - name: kafka-9092
+                      containerPort: 9092

@@ -1,0 +1,13 @@
+#! kustomization.yaml
+# Generated code, do not edit
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+    - 0-modulenotificationdispatcher-namespace.yaml
+    - default-network-policy.yaml
+    - kafka-deployment.yaml
+    - kafka-expose.yaml
+    - kafka-service.yaml
+    - zookeeper-deployment.yaml
+    - zookeeper-expose.yaml
+    - zookeeper-service.yaml

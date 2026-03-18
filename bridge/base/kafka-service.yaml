@@ -1,0 +1,23 @@
+# check if there is at least one published port
+
+#! kafka-service.yaml
+# Generated code, do not edit
+apiVersion: v1
+kind: Service
+metadata:
+    name: kafka-published
+    namespace: modulenotificationdispatcher
+    labels:
+        com.docker.compose.project: modulenotificationdispatcher
+        com.docker.compose.service: kafka
+spec:
+    selector:
+        com.docker.compose.project: modulenotificationdispatcher
+        com.docker.compose.service: kafka
+    ports:
+        - name: kafka-9092
+          port: 9092
+          protocol: TCP
+          targetPort: kafka-9092
+
+# check if there is at least one published port

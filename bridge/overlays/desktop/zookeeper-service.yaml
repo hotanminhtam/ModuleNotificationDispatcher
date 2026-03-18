@@ -1,0 +1,9 @@
+#! zookeeper-service.yaml
+# Generated code, do not edit
+apiVersion: v1
+kind: Service
+metadata:
+    name: zookeeper-published
+    namespace: modulenotificationdispatcher
+spec:
+    type: LoadBalancer

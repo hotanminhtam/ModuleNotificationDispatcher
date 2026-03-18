@@ -13,7 +13,4 @@ public class DispatcherSettings
 
     /// <summary>Maximum retry attempts on delivery failure.</summary>
     public int MaxRetry { get; set; } = 3;
-
-    /// <summary>Total number of sample notifications to generate.</summary>
-    public int NotificationCount { get; set; } = 5000;
 }

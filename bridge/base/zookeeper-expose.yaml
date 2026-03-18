@@ -1,0 +1,24 @@
+#! zookeeper-expose.yaml
+# Generated code, do not edit
+apiVersion: v1
+kind: Service
+metadata:
+    name: zookeeper
+    namespace: modulenotificationdispatcher
+    labels:
+        com.docker.compose.project: modulenotificationdispatcher
+        com.docker.compose.service: zookeeper
+spec:
+    selector:
+        com.docker.compose.project: modulenotificationdispatcher
+        com.docker.compose.service: zookeeper
+    ports:
+        - name: zookeeper-2888
+          port: 2888
+          targetPort: zookeeper-2888
+        - name: zookeeper-3888
+          port: 3888
+          targetPort: zookeeper-3888
+        - name: zookeeper-2181
+          port: 2181
+          targetPort: zookeeper-2181

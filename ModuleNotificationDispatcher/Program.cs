@@ -1,14 +1,17 @@
 using Microsoft.Extensions.Configuration;
-using ModuleNotificationDispatcher.Application.Dispatcher;
 using ModuleNotificationDispatcher.Domain.Interfaces;
 using ModuleNotificationDispatcher.Domain.Models;
+using ModuleNotificationDispatcher.Infrastructure.Kafka;
 using ModuleNotificationDispatcher.Infrastructure.Providers;
 
 namespace ModuleNotificationDispatcher;
 
+/// <summary>
+/// Entry point: supports produce and consume modes via command-line argument.
+/// </summary>
 internal class Program
 {
-    static async Task Main()
+    static async Task Main(string[] args)
     {
         Console.WriteLine("==============================================================");
         Console.WriteLine("    MODULE NOTIFICATION DISPATCHER");
@@ -20,13 +23,20 @@ internal class Program
             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
             .Build();
 
-        var settings = new DispatcherSettings();
-        configuration.GetSection("DispatcherSettings").Bind(settings);
+        var dispatcherSettings = new DispatcherSettings();
+        configuration.GetSection("DispatcherSettings").Bind(dispatcherSettings);
 
-        Console.WriteLine($"[CONFIG] Timeout={settings.PerRequestTimeoutSeconds}s, " +
-                          $"Parallelism={settings.MaxParallelism}, " +
-                          $"Retry={settings.MaxRetry}, " +
-                          $"Count={settings.NotificationCount}");
+        var kafkaSettings = new KafkaSettings();
+        configuration.GetSection("KafkaSettings").Bind(kafkaSettings);
+
+        var mode = args.Length > 0 ? args[0].ToLower() : "consume";
+
+        Console.WriteLine($"[CONFIG] Timeout={dispatcherSettings.PerRequestTimeoutSeconds}s, " +
+                          $"Parallelism={dispatcherSettings.MaxParallelism}, " +
+                          $"Retry={dispatcherSettings.MaxRetry}");
+        Console.WriteLine($"[CONFIG] Broker={kafkaSettings.BootstrapServers}, " +
+                          $"Topic={kafkaSettings.Topic}");
+        Console.WriteLine($"[CONFIG] Mode={mode}\n");
 
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (s, e) =>
@@ -36,49 +46,35 @@ internal class Program
             Console.WriteLine("\n[CANCEL] Shutting down gracefully...");
         };
 
-        INotificationProvider[] providers =
-        [
-            new EmailNotificationProvider(),
-            new SmsNotificationProvider()
-        ];
-
-        var dispatcher = new NotificationDispatcher(
-            providers: providers,
-            perRequestTimeout: TimeSpan.FromSeconds(settings.PerRequestTimeoutSeconds),
-            maxParallelism: settings.MaxParallelism,
-            maxRetry: settings.MaxRetry);
-
-        Console.WriteLine("\n[SETUP] Generating sample notifications...\n");
-
-        var notifications = new List<Notification>();
-        for (int i = 0; i < settings.NotificationCount; i++)
+        switch (mode)
         {
-            bool isEmail = i % 2 == 0;
-            var priority = (i % 3) switch
-            {
-                0 => NotificationPriority.High,
-                1 => NotificationPriority.Medium,
-                _ => NotificationPriority.Low
-            };
+            case "produce":
+                int count = args.Length > 1 && int.TryParse(args[1], out var c) ? c : kafkaSettings.DefaultProduceCount;
+                await KafkaProducerHelper.ProduceAsync(kafkaSettings, count);
+                break;
 
-            notifications.Add(new Notification
-            {
-                Destination = isEmail ? $"user{i}@mail.com" : $"+8490000{i:D4}",
-                Message = $"Notification #{i} - Priority: {priority}",
-                Type = isEmail ? NotificationType.Email : NotificationType.Sms,
-                Priority = priority
-            });
+            case "consume":
+                INotificationProvider[] providers =
+                [
+                    new EmailNotificationProvider(),
+                    new SmsNotificationProvider()
+                ];
+
+                var consumer = new KafkaConsumerService(
+                    kafkaSettings, providers, dispatcherSettings);
+                await consumer.ConsumeAsync(
+                    batchSize: kafkaSettings.BatchSize,
+                    batchTimeout: TimeSpan.FromSeconds(kafkaSettings.BatchTimeoutSeconds),
+                    ct: cts.Token);
+                break;
+
+            default:
+                Console.WriteLine("Usage:");
+                Console.WriteLine("  dotnet run -- produce [count]   Produce sample notifications to Kafka");
+                Console.WriteLine("  dotnet run -- consume           Consume from Kafka & dispatch");
+                break;
         }
 
-        try
-        {
-            await dispatcher.DispatchAsync(notifications, cts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            Console.WriteLine("\n[CANCELLED] Dispatch was cancelled.");
-        }
-
-        Console.WriteLine("Thank you for using ModuleNotificationDispatcher.");
+        Console.WriteLine("\nThank you for using ModuleNotificationDispatcher.");
     }
 }
