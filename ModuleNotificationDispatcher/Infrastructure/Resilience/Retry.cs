@@ -1,49 +1,58 @@
 namespace ModuleNotificationDispatcher.Infrastructure.Resilience;
 
 /// <summary>
-/// Provides resilient execution logic for asynchronous operations.
+/// Retry: Thử lại một hành động nếu bị lỗi.
+/// Sử dụng Exponential Backoff: thời gian chờ tăng dần giữa các lần retry.
+///
+/// Ví dụ với maxRetry = 3:
+///   Lần 1 lỗi → chờ 500ms  → thử lần 2
+///   Lần 2 lỗi → chờ 1000ms → thử lần 3
+///   Lần 3 lỗi → chờ 2000ms → thử lần 4 (lần cuối)
+///   Lần 4 lỗi → THROW EXCEPTION (hết số lần retry)
 /// </summary>
 public static class Retry
 {
     /// <summary>
-    /// Executes an asynchronous action with a retry policy based on exponential backoff.
+    /// Thực thi một action bất đồng bộ với cơ chế retry.
     /// </summary>
-    /// <param name="action">The asynchronous task to perform.</param>
-    /// <param name="cancellationToken">Token to monitor for cancellation or timeout.</param>
-    /// <param name="maxRetry">Maximum number of retry attempts (default is 3).</param>
+    /// <param name="action">Hành động cần thực hiện (ví dụ: gửi email).</param>
+    /// <param name="cancellationToken">Token để hủy nếu bị timeout hoặc Ctrl+C.</param>
+    /// <param name="maxRetry">Số lần thử lại tối đa (mặc định 3).</param>
     public static async Task ExecuteAsync(
         Func<Task> action,
         CancellationToken cancellationToken,
         int maxRetry = 3)
     {
         int retryCount = 0;
+
         while (true)
         {
-            // Fail fast if cancellation has already been requested
+            // Kiểm tra xem có bị hủy chưa (timeout hoặc Ctrl+C)
             cancellationToken.ThrowIfCancellationRequested();
 
             try
             {
+                // Thử thực hiện action
                 await action();
-                return;
+                return; // Thành công → thoát vòng lặp
             }
             catch (OperationCanceledException)
             {
-                // Do not retry on cancellation or explicit timeout; propagating upward.
+                // Bị hủy (timeout hoặc Ctrl+C) → không retry, ném lỗi lên
                 throw;
             }
             catch (Exception)
             {
-                // If max retries reached, propagate the error.
+                // Lỗi khác → kiểm tra còn lần retry không
                 if (retryCount >= maxRetry)
-                    throw;
+                    throw; // Hết lần retry → ném lỗi lên
 
-                // Calculate exponential backoff delay (e.g., 500ms, 1000ms, 2000ms)
-                const int BaseDelayMilliseconds = 500;
-                int delay = (int)Math.Pow(2, retryCount) * BaseDelayMilliseconds;
+                // Tính thời gian chờ theo Exponential Backoff:
+                // retryCount=0 → 500ms, retryCount=1 → 1000ms, retryCount=2 → 2000ms
+                int delay = (int)Math.Pow(2, retryCount) * 500;
                 retryCount++;
 
-                // Await a cancellable delay before the next attempt.
+                // Chờ trước khi thử lại (có thể bị hủy bởi cancellationToken)
                 await Task.Delay(delay, cancellationToken);
             }
         }
