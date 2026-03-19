@@ -1,3 +1,6 @@
 <Solution>
-  <Project Path="ModuleNotificationDispatcher/ModuleNotificationDispatcher.csproj" />
+  <Project Path="src/ModuleNotificationDispatcher/ModuleNotificationDispatcher.csproj" />
+  <Project Path="src/ModuleNotificationDispatcher.Domain/ModuleNotificationDispatcher.Domain.csproj" />
+  <Project Path="src/ModuleNotificationDispatcher.Application/ModuleNotificationDispatcher.Application.csproj" />
+  <Project Path="src/ModuleNotificationDispatcher.Infrastructure/ModuleNotificationDispatcher.Infrastructure.csproj" />
 </Solution>

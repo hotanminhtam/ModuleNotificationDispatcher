@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Confluent.Kafka;
+using Microsoft.Extensions.Logging;
 using ModuleNotificationDispatcher.Application.Dispatcher;
 using ModuleNotificationDispatcher.Domain.Interfaces;
 using ModuleNotificationDispatcher.Domain.Models;
@@ -14,32 +15,27 @@ public class KafkaConsumerService
 {
     private readonly KafkaSettings _kafkaSettings;
     private readonly NotificationDispatcher _dispatcher;
+    private readonly ILogger<KafkaConsumerService> _logger;
 
     /// <summary>
-    /// Initializes the consumer with Kafka settings, providers, and dispatcher settings.
+    /// Initializes the consumer with Kafka settings, dispatcher, and logger.
     /// </summary>
     /// <param name="kafkaSettings">Kafka connection and topic configuration.</param>
-    /// <param name="providers">Notification providers to use for dispatching.</param>
-    /// <param name="dispatcherSettings">Dispatcher configuration (timeout, parallelism, retry).</param>
+    /// <param name="dispatcher">Dispatcher pipeline for processing notifications.</param>
+    /// <param name="logger">Logger instance for structured output.</param>
     public KafkaConsumerService(
         KafkaSettings kafkaSettings,
-        IEnumerable<INotificationProvider> providers,
-        DispatcherSettings dispatcherSettings)
+        NotificationDispatcher dispatcher,
+        ILogger<KafkaConsumerService> logger)
     {
         _kafkaSettings = kafkaSettings;
-        _dispatcher = new NotificationDispatcher(
-            providers,
-            TimeSpan.FromSeconds(dispatcherSettings.PerRequestTimeoutSeconds),
-            dispatcherSettings.MaxParallelism,
-            dispatcherSettings.MaxRetry);
+        _dispatcher = dispatcher;
+        _logger = logger;
     }
 
     /// <summary>
     /// Starts consuming messages from Kafka and dispatching them in batches.
     /// </summary>
-    /// <param name="batchSize">Number of messages to collect before dispatching.</param>
-    /// <param name="batchTimeout">Max time to wait for a full batch.</param>
-    /// <param name="ct">Cancellation token to stop the consumer.</param>
     public async Task ConsumeAsync(int batchSize, TimeSpan batchTimeout, CancellationToken ct)
     {
         var config = new ConsumerConfig
@@ -53,9 +49,9 @@ public class KafkaConsumerService
         using var consumer = new ConsumerBuilder<Ignore, string>(config).Build();
         consumer.Subscribe(_kafkaSettings.Topic);
 
-        Console.WriteLine($"[KAFKA] Subscribed to topic '{_kafkaSettings.Topic}' " +
-                          $"(group: {_kafkaSettings.GroupId})");
-        Console.WriteLine($"[KAFKA] Batch size: {batchSize}, Batch timeout: {batchTimeout.TotalSeconds}s\n");
+        _logger.LogInformation(
+            "Subscribed to topic '{Topic}' (group: {GroupId}) | Batch: {BatchSize}, Timeout: {Timeout}s",
+            _kafkaSettings.Topic, _kafkaSettings.GroupId, batchSize, batchTimeout.TotalSeconds);
 
         while (!ct.IsCancellationRequested)
         {
@@ -64,29 +60,29 @@ public class KafkaConsumerService
             if (batch.Count == 0)
                 continue;
 
-            Console.WriteLine($"[KAFKA] Collected batch of {batch.Count} notifications");
+            _logger.LogInformation("Collected batch of {Count} notifications", batch.Count);
 
             try
             {
                 await _dispatcher.DispatchAsync(batch, ct);
                 consumer.Commit();
-                Console.WriteLine("[KAFKA] Batch committed.\n");
+                _logger.LogInformation("Batch committed");
             }
             catch (OperationCanceledException)
             {
-                Console.WriteLine("\n[KAFKA] Consumer cancelled.");
+                _logger.LogWarning("Consumer cancelled");
                 break;
             }
         }
 
         consumer.Close();
-        Console.WriteLine("[KAFKA] Consumer closed.");
+        _logger.LogInformation("Consumer closed");
     }
 
     /// <summary>
     /// Collects a batch of notifications from Kafka, up to batchSize or batchTimeout.
     /// </summary>
-    private static List<Notification> CollectBatch(
+    private List<Notification> CollectBatch(
         IConsumer<Ignore, string> consumer,
         int batchSize,
         TimeSpan batchTimeout,
@@ -113,7 +109,7 @@ public class KafkaConsumerService
             }
             catch (ConsumeException ex)
             {
-                Console.WriteLine($"[KAFKA] Consume error: {ex.Error.Reason}");
+                _logger.LogError("Consume error: {Reason}", ex.Error.Reason);
             }
         }
 

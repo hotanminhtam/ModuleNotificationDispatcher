@@ -1,4 +1,4 @@
-namespace ModuleNotificationDispatcher.Infrastructure.Resilience;
+namespace ModuleNotificationDispatcher.Application.Resilience;
 
 /// <summary>
 /// Retries an async action with Exponential Backoff (500ms → 1s → 2s → ...).

@@ -1,7 +1,8 @@
+using Microsoft.Extensions.Logging;
 using ModuleNotificationDispatcher.Domain.Exceptions;
 using ModuleNotificationDispatcher.Domain.Interfaces;
 using ModuleNotificationDispatcher.Domain.Models;
-using ModuleNotificationDispatcher.Infrastructure.Resilience;
+using ModuleNotificationDispatcher.Application.Resilience;
 
 namespace ModuleNotificationDispatcher.Application.Dispatcher;
 
@@ -14,31 +15,26 @@ public class NotificationDispatcher
     private readonly TimeSpan _perRequestTimeout;
     private readonly int _maxParallelism;
     private readonly int _maxRetry;
+    private readonly ILogger<NotificationDispatcher> _logger;
 
     /// <summary>
-    /// Initializes the Dispatcher with the required settings.
+    /// Initializes the Dispatcher via DI.
     /// </summary>
-    /// <param name="providers">Notification providers to use.</param>
-    /// <param name="perRequestTimeout">Max time per notification before timeout.</param>
-    /// <param name="maxParallelism">Max concurrent notifications.</param>
-    /// <param name="maxRetry">Max retry attempts on failure.</param>
     public NotificationDispatcher(
         IEnumerable<INotificationProvider> providers,
-        TimeSpan perRequestTimeout,
-        int maxParallelism,
-        int maxRetry)
+        DispatcherSettings settings,
+        ILogger<NotificationDispatcher> logger)
     {
         _providers = providers.ToDictionary(p => p.Type);
-        _perRequestTimeout = perRequestTimeout;
-        _maxParallelism = maxParallelism;
-        _maxRetry = maxRetry;
+        _perRequestTimeout = TimeSpan.FromSeconds(settings.PerRequestTimeoutSeconds);
+        _maxParallelism = settings.MaxParallelism;
+        _maxRetry = settings.MaxRetry;
+        _logger = logger;
     }
 
     /// <summary>
     /// Dispatches a batch of notifications concurrently, prioritized by urgency.
     /// </summary>
-    /// <param name="notifications">The list of notifications to dispatch.</param>
-    /// <param name="ct">Cancellation token to cancel the entire operation.</param>
     public async Task DispatchAsync(
         IEnumerable<Notification> notifications,
         CancellationToken ct)
@@ -54,7 +50,7 @@ public class NotificationDispatcher
         var options = new ParallelOptions { MaxDegreeOfParallelism = _maxParallelism };
         long successCount = 0, failureCount = 0, timeoutCount = 0;
 
-        Console.WriteLine($"--- Starting dispatch for {sorted.Count} notifications ---");
+        _logger.LogInformation("Starting dispatch for {Count} notifications", sorted.Count);
         var watch = System.Diagnostics.Stopwatch.StartNew();
 
         await Parallel.ForEachAsync(sorted, options, async (notification, _) =>
@@ -69,12 +65,11 @@ public class NotificationDispatcher
         });
 
         watch.Stop();
-        PrintSummary(watch.Elapsed.TotalSeconds, successCount, failureCount, timeoutCount);
+        _logger.LogInformation(
+            "Dispatch complete — {Elapsed:F2}s | Success: {Success} | Failure: {Failure} | Timeout: {Timeout}",
+            watch.Elapsed.TotalSeconds, successCount, failureCount, timeoutCount);
     }
 
-    /// <summary>
-    /// Processes a single notification: find provider → send with retry → handle timeout.
-    /// </summary>
     private async Task<Result> ProcessOneAsync(Notification notification, CancellationToken ct)
     {
         if (!_providers.TryGetValue(notification.Type, out var provider))
@@ -93,17 +88,6 @@ public class NotificationDispatcher
         }
         catch (OperationCanceledException) { return Result.Timeout; }
         catch (NotificationDeliveryException) { return Result.Failure; }
-    }
-
-    private static void PrintSummary(double totalSeconds, long success, long failure, long timeout)
-    {
-        Console.WriteLine("\n==========================================");
-        Console.WriteLine("     NOTIFICATION DISPATCH SUMMARY");
-        Console.WriteLine($"  Total Time: {totalSeconds:F2}s");
-        Console.WriteLine($"  Success:    {success}");
-        Console.WriteLine($"  Failure:    {failure}");
-        Console.WriteLine($"  Timeout:    {timeout}");
-        Console.WriteLine("==========================================\n");
     }
 
     private enum Result { Success, Failure, Timeout }

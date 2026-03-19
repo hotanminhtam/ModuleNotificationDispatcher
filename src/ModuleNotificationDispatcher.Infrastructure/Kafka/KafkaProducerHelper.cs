@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Confluent.Kafka;
+using Microsoft.Extensions.Logging;
 using ModuleNotificationDispatcher.Domain.Models;
 
 namespace ModuleNotificationDispatcher.Infrastructure.Kafka;
@@ -7,23 +8,36 @@ namespace ModuleNotificationDispatcher.Infrastructure.Kafka;
 /// <summary>
 /// Helper to produce sample notification messages to a Kafka topic for testing.
 /// </summary>
-public static class KafkaProducerHelper
+public class KafkaProducerHelper
 {
+    private readonly KafkaSettings _kafkaSettings;
+    private readonly ILogger<KafkaProducerHelper> _logger;
+
+    /// <summary>
+    /// Initializes a new instance with Kafka settings and logger.
+    /// </summary>
+    /// <param name="kafkaSettings">Kafka connection and topic configuration.</param>
+    /// <param name="logger">Logger instance for structured output.</param>
+    public KafkaProducerHelper(KafkaSettings kafkaSettings, ILogger<KafkaProducerHelper> logger)
+    {
+        _kafkaSettings = kafkaSettings;
+        _logger = logger;
+    }
+
     /// <summary>
     /// Produces a batch of sample notification messages to the configured Kafka topic.
     /// </summary>
-    /// <param name="kafkaSettings">Kafka connection and topic configuration.</param>
     /// <param name="count">Number of messages to produce.</param>
-    public static async Task ProduceAsync(KafkaSettings kafkaSettings, int count)
+    public async Task ProduceAsync(int count)
     {
         var config = new ProducerConfig
         {
-            BootstrapServers = kafkaSettings.BootstrapServers
+            BootstrapServers = _kafkaSettings.BootstrapServers
         };
 
         using var producer = new ProducerBuilder<Null, string>(config).Build();
 
-        Console.WriteLine($"[PRODUCER] Sending {count} notifications to topic '{kafkaSettings.Topic}'...\n");
+        _logger.LogInformation("Sending {Count} notifications to topic '{Topic}'...", count, _kafkaSettings.Topic);
 
         for (int i = 0; i < count; i++)
         {
@@ -45,14 +59,14 @@ public static class KafkaProducerHelper
 
             var json = JsonSerializer.Serialize(notification);
             await producer.ProduceAsync(
-                kafkaSettings.Topic,
+                _kafkaSettings.Topic,
                 new Message<Null, string> { Value = json });
 
             if ((i + 1) % 100 == 0)
-                Console.WriteLine($"  Produced {i + 1}/{count} messages");
+                _logger.LogInformation("Produced {Current}/{Total} messages", i + 1, count);
         }
 
         producer.Flush(TimeSpan.FromSeconds(10));
-        Console.WriteLine($"\n[PRODUCER] Done. {count} messages sent to '{kafkaSettings.Topic}'.");
+        _logger.LogInformation("Done. {Count} messages sent to '{Topic}'", count, _kafkaSettings.Topic);
     }
 }
